@@ -8,8 +8,6 @@ import cv2
 def nbimage(data):
     IPython.display.display(PIL.Image.fromarray(data))
 
-def draw_square(data):
-    
 
 # create an image consisting of random colors
 

@@ -19,18 +19,28 @@ data = np.zeros((IMG_WIDTH,IMG_HEIGHT,3), np.uint8) # a 512x512 image, with 3 co
 num_squares = 1
 
 for i in range(num_squares):
-    x1 = np.random.randint(IMG_WIDTH-1)
-    y1 = np.random.randint(IMG_HEIGHT-1)
+    w = np.random.randint(2, IMG_WIDTH)
+    h = np.random.randint(2, IMG_HEIGHT)
+
+    x1 = np.random.randint(IMG_WIDTH-w)
+    y1 = np.random.randint(IMG_HEIGHT-h)
     x2 = np.random.randint(x1, IMG_WIDTH)
     y2 = np.random.randint(y1, IMG_HEIGHT)
 
-    rgb = np.random.randint(255,size=3)
-    print(rgb)
+    # rgb = np.random.randint(255,size=3)
+    rgb = np.array([255, 255, 255])
+    print(w)
+    print(h)
 
-    data[x1:x2,y1][:,y1] = rgb
+    for i in range (3):
+        layer = data[i]
+        print(layer)
+
+
+    # data[x1:x2,y1][:,y1] = rgb
 #     data[:,y1,x1:x2][:,y1] = rgb
 #     data[:,y2,x1:x2][:,y2] = rgb 
-print(data)
+# print(data)
 # by default, rand creates floating point numbers between [0,1].  We need to convert that to 8-bit bytes between [0,255]
 # data = (255*data).astype(np.uint8)
 
