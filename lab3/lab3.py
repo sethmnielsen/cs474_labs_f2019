@@ -64,13 +64,100 @@ import matplotlib.pyplot as plt
 from torchvision import transforms, utils, datasets
 from tqdm import tqdm
 from torch.nn.parameter import Parameter
-import pdb
+from IPython.core.debugger import Pdb
 
 assert torch.cuda.is_available(), "You need to request a GPU from Runtime > Change Runtime"
 
 
 #%%
 # Use the dataset class you created in lab2
+
+class Conv2d(nn.Conv2d):
+    def __init__(self, in_channels, out_channels, kernel_size, init_strategy='xav', stride=1, padding=0, 
+                    dilation=1, groups=1, bias=True, padding_mode='zeros'):
+        self.__dict__.update(locals())
+        super(Conv2d, self).__init__()
+
+        # tensor of shape (out, in, k, k)
+        self.weight = Parameter(torch.Tensor(self.out_channels, self.in_channels, *kernel_size))
+        self.bias = Parameter(torch.Tensor(self.out_channels))
+
+        self.bias.data.uniform_(0, 0)
+
+        # Different initialization strategies for weights, specify with parameter: 
+        if init_strategy == 'xav':
+            self.weight.data.xavier_uniform_()
+        elif init_strategy == 'orth':
+            # orthogonal (SVD with numpy)
+            M = np.random.random((out_channels, in_channels*kernel_size[0]*kernel_size[1])).astype(np.float32)
+            U, _, Vt = np.linalg.svd(M, full_matrices=False)
+            if len(M) > len(M[0]): # take V if M is wide, take U if tall
+                mat = U
+            else:
+                mat = Vt
+            W = mat.reshape((self.out_channels, self.n_channels, *kernel_size))
+            self.weight.data = torch.from_numpy(W)
+        elif init_strategy == 'uni':
+            self.weight.data.uniform_(-1, 1)
+        else:
+            self.weight.data.xavier_uniform_()
+
+        
+    def forward(self, x):
+        return F.conv2d(x, self.weight, self.bias, self.stride, 
+                        self.padding, self.dilation, self.groups)
+
+class CrossEntropyLoss(nn.Module):
+    def __init__(self, weight=None, size_average=None, ignore_index=-100, 
+                  reduce=None, reduction='mean'):
+        self.__dict__.update(locals())
+        super(CrossEntropyLoss, self).__init__()
+
+    """ y_hat: Tensor of shape(batch_size, num_classes)
+        y_truth: Tensor of shape(batch_size, 1) with entries in range [0,9]
+    """
+    def forward(self, y_hat, y_truth):
+        """ - encode y_truth to shape(batch_size, num_classes) 
+                    3 -> [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]; 
+                    0 -> [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]; 
+                    etc. You map an integer to an array of length n_classes, 
+                    with a 1 in the index of the true class.
+            - formula from CrossEntropyLoss
+                For uniform/random initializaation, *can* modify Cross Entropy Loss 
+                by using the log-sum-exp trick to avoid NaN/overflow
+        """
+
+        wrong_class_penalty = torch.log(torch.sum(torch.exp(y_hat), dim=1))
+        batchsize, classes = y_hat.size()
+        b = torch.zeros((batchsize,classes))
+        b[np.arange(batchsize), y_truth] = 1  # : rather than np.arange?
+        true_class_preds = torch.sum(y_hat * b.cuda(),dim=1)
+        
+        return torch.mean(-true_class_preds + wrong_class_penalty)
+
+        
+class ConvNetwork(nn.Module):
+    def __init__(self, dataset):
+        super(ConvNetwork, self).__init__()
+        x, y = dataset[0]
+        c, h, w = x.size()  # c=numchannels, h=height?, w=width?
+        output = 10  # number of ints to output
+
+        self.net = nn.Sequential(
+            # numchannels, numkernels/output channels, sz of conv_kernel, space added to img b4 convolve
+            Conv2d(c, 10, (3, 3), padding=(1,1)),
+            nn.ReLU(),
+            Conv2d(10, output, (28, 28), padding=(0,0))  
+        )
+
+    def forward(self, x):
+
+        return self.net(x).squeeze(2).squeeze(2)
+        """ (n, 10, 1, 1)
+            (n, 10, 1)  <-- squeezed dim 2
+            (n, 10)     <-- squeezed dim 2 again
+        """
+
 class FashionMNISTProcessedDataset(Dataset):
     def __init__(self, root, train=True):
         self.data = datasets.FashionMNIST(root,
@@ -83,7 +170,91 @@ class FashionMNISTProcessedDataset(Dataset):
         return x, y
 
     def __len__(self):
-        return 100 #len(self.data)
+        return len(self.data) # 100
+
+train_dataset = FashionMNISTProcessedDataset('/home/seth/Downloads/fashionmnist', train=True)
+val_dataset = FashionMNISTProcessedDataset('/home/seth/Downloads/fashionmnist', train=False)
+model = ConvNetwork(train_dataset)
+model = model.cuda()
+objective = CrossEntropyLoss()  # gotta code this up myself, same API as below
+optimizer = optim.Adam(model.parameters(), lr=1e-4)
+train_loader = DataLoader(train_dataset,
+                          batch_size=42,
+                          pin_memory=True)
+val_loader = DataLoader(val_dataset,
+                          batch_size=42,
+                          pin_memory=True)
+
+losses = []
+validations = []
+
+for epoch in range(1):
+
+    loop = tqdm(total=len(train_loader), position=0, leave=False)
+
+    for batch, (x, y_truth) in enumerate(train_loader):
+        x, y_truth = x.cuda(async=True), y_truth.cuda(async=True)
+
+        optimizer.zero_grad()
+        y_hat = model(x)
+
+        loss = objective(y_hat, y_truth)
+
+        loss.backward()
+
+        losses.append(loss.item())
+        accuracy = 0
+        loop.set_description(f'epoch:{epoch}, loss:{loss.item():.4f}, accuracy:{accuracy:.3f}')
+        loop.update(1)
+
+        optimizer.step()
+
+        if batch % 500 == 0:
+            # item returns float, so objective().item() gives loss (which is 1st element)
+            val = np.mean([ objective( model(x.cuda()), y.cuda() ).item()  
+                            for x, y in val_loader])
+            validations.append((len(losses), val))
+
+    loop.close()
+
+a, b = zip(*validations)
+plt.plot(losses, label='train')
+plt.plot(a, b, label='val')
+plt.legend()
+plt.show()
+            
+#%%
+
+# both of these will be necessary for the softmax part plus the torch.log idea
+a = torch.from_numpy(np.random.randn(42,10,1).astype(np.float32))
+b = torch.exp(a)
+
+z = a / b.sum(1, keepdim=True)  # makes a row arr with broadcastable shape for a / b.sum
+
+#%%
+# index tensor more easily
+a = torch.from_numpy(np.random.randn(3,10,1).astype(np.float32))
+b = torch.exp(a)
+i = torch.from_numpy(np.random.randint(0,10,3))  # 3 random ints btw 0 and 10 for indices
+r = torch.arange(b.size(0))
+c = i
+
+b[r,c]  # call .mean(), or = 0
+
+
+#%%
+
+# softmax - convert to probabilities; can't use in cross entropy loss, but outside ok
+
+# gives tensor of most likely class for each item, same size as y_truth
+guesses = torch.softmax(y_hat, dim=1).argmax(dim=1)  
+
+# returns tensor of guesses.size containing 1s for correct, 0s for incorrect
+# Calculate accuracy from this 
+guesses == y_truth  
+
+accuracy = (guesses == y_truth).float().mean()
+
 
 #%% [markdown]
 # ___
@@ -123,15 +294,15 @@ class FashionMNISTProcessedDataset(Dataset):
 
 #%%
 class CrossEntropyLoss(nn.Module):
-  pass
+    pass
 
 class Conv2d(nn.Module):
-  pass
+    pass
 
 
 #%%
 class ConvNetwork(nn.Module):
-  pass
+    pass
 
 
 #%%
