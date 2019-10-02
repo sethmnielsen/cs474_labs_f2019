@@ -46,14 +46,6 @@ from IPython import get_ipython
 # **DONE:**
 
 #%%
-get_ipython().system('pip3 install torch')
-get_ipython().system('pip3 install torchvision')
-get_ipython().system('pip3 install tqdm')
-
-#%% [markdown]
-# 
-
-#%%
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -66,7 +58,7 @@ from tqdm import tqdm
 from torch.nn.parameter import Parameter
 from IPython.core.debugger import Pdb
 
-assert torch.cuda.is_available(), "You need to request a GPU from Runtime > Change Runtime"
+# assert torch.cuda.is_available(), "You need to request a GPU from Runtime > Change Runtime"
 
 
 #%%
