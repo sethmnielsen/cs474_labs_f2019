@@ -18,6 +18,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
+import time
 from IPython import get_ipython
 
 # %% [markdown]
@@ -362,7 +363,7 @@ try:
     model = DeepUNetwork(train_dataset).cuda()
     
     # Compute and print the number of parameters in the model
-    print('number of trainable parameters =', count_parameters(model))
+    # print('number of trainable parameters =', count_parameters(model))
     
     objective = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
@@ -395,11 +396,6 @@ def compute_accuracy(y_hat, y_truth):
     union = torch.sum(y_hat[0] + y_truth >= 1)
     return intersection/union
 
-num_epochs = 5
-t_len = len(train_loader)
-v_len = len(val_loader)
-loops_per_epoch = t_len + (t_len // val_interval + 1) * (v_len-1)
-
 train_loss_hist = []
 train_accuracy_hist = []
 val_loss_hist = []
@@ -411,6 +407,11 @@ val_accuracies = []
 val_interval = 50  # num of iterations between validation tests
 val_loss_mean = 0
 val_accuracy_mean = 0
+
+num_epochs = 5
+t_len = len(train_loader)
+v_len = len(val_loader)
+loops_per_epoch = t_len + (t_len // val_interval + 1) * (v_len-1)
 
 gc.collect()
 torch.cuda.empty_cache()
