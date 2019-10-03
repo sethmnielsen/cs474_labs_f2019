@@ -231,40 +231,13 @@ def count_parameters(model):
 # Instead you will write up the network like normal variable assignment as the example shown below:
 # You are welcome (and encouraged) to use the built-in batch normalization and dropout layer.
 
-# TODO: You need to change this to fit the UNet structure!!!
-class CancerDetection(nn.Module):
-    def __init__(self):
-        super(CancerDetection, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)
-        self.relu2 = nn.ReLU()
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.relu4 = nn.ReLU()
-
-    def forward(self, input):
-        conv1_out = self.conv1(input)
-        relu2_out = self.relu2(conv1_out)
-        conv3_out = self.conv3(relu2_out)
-        relu4_out = self.relu4(conv3_out)
-        return relu4_out
-
-
-# 5 blocks
-class ConvBlock(nn.Module):
-    def __init__(self, c, h, w, num_layers=3):
-        for i in range(num_layers):
-            # create some Conv2d layers
-            # use nn.Sequential
-            pass
-
-
-
 class TwoConv2d(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(TwoConv2d, self).__init__()
 
         self.conv2d = nn.Sequential(nn.Conv2d(in_channels, out_channels, (3,3), padding=(1,1)),
                                     nn.ReLU(),
-                                    nn.Conv2d(in_channels, out_channels, (3,3), padding=(1,1)),
+                                    nn.Conv2d(out_channels, out_channels, (3,3), padding=(1,1)),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(out_channels)
                                     )
@@ -287,13 +260,13 @@ class DeepUNetwork(nn.Module):
     def __init__(self, dataset, initialization_strategy='xav'):
         super(DeepUNetwork, self).__init__()
         x, y = dataset[0]
-        c, h, w = x.size()  # c=numchannels, h=height, w=width
+        n, c, h, w = x.size()  # c=numchannels, h=height, w=width
         out = 2  # number of final output channels; correspond to number of classes
 
         # do conv transpose; instead of input to output shape size, it's output to input
 
         # Initialize like this but using ConvBlock
-        self.conv0 = TwoConv2d(c,      64)
+        self.conv0 = TwoConv2d(3,      64)
         self.conv1 = TwoConv2d(64,    128)
         self.conv2 = TwoConv2d(128,   256)
         self.conv3 = TwoConv2d(256,   512)
@@ -476,6 +449,7 @@ try:
 
 except:
     __ITB__()
+    exit(0)
 
 # %% [markdown]
 #
