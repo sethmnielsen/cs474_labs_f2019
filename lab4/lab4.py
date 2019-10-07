@@ -1,25 +1,5 @@
 # To add a new cell, type '#%%'
 # To add a new markdown cell, type '#%% [markdown]'
-# %%
-from IPython.core.ultratb import AutoFormattedTB
-import gc
-import tarfile
-import gzip
-import os
-import torchvision
-import pdb
-from torch.nn.parameter import Parameter
-from tqdm import tqdm
-from torchvision import transforms, utils, datasets
-import matplotlib.pyplot as plt
-import numpy as np
-from torch.utils.data import Dataset, DataLoader
-import torch.optim as optim
-import torch.nn.functional as F
-import torch.nn as nn
-import torch
-import time
-from IPython import get_ipython
 
 # %% [markdown]
 # <a href="https://colab.research.google.com/github/sethmnielsen/cs474_labs_f2019/blob/master/DL_Lab4.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
@@ -142,12 +122,47 @@ from IPython import get_ipython
 # get_ipython().system('pip3 install torchvision')
 # get_ipython().system('pip3 install tqdm')
 
+from IPython.core.ultratb import AutoFormattedTB
+import sys
+import traceback
+import gc
+import tarfile
+import gzip
+import os
+import torchvision
+import pdb
+from torch.nn.parameter import Parameter
+from tqdm import tqdm
+from torchvision import transforms, utils, datasets
+import matplotlib.pyplot as plt
+import numpy as np
+from torch.utils.data import Dataset, DataLoader
+import torch.optim as optim
+import torch.nn.functional as F
+import torch.nn as nn
+from torch import Tensor
+import torch
+import time
+from IPython import get_ipython
+from typing import *
+
+# Live plotting stuff
+import seaborn as sns
+sns.set_style('whitegrid')
+custom = sns.color_palette("Paired", 9)
+sns.set_palette(custom)
+sns.set()
+plt.ion()
+
 __ITB__ = AutoFormattedTB(mode='Verbose', color_scheme='LightBg', tb_offset=1)
 
 assert torch.cuda.is_available(), "You need to request a GPU from Runtime > Change Runtime"
 
 
 # %%
+"""
+    ########################### DOWNLOAD DATASET #####################################
+"""
 class CancerDataset(Dataset):
     def __init__(self, root, download=True, size=512, train=True):
         if download and not os.path.exists(os.path.join(root, 'cancer_data')):
@@ -185,6 +200,69 @@ class CancerDataset(Dataset):
     def __len__(self):
         return len(self.dataset_folder)
 
+class DeepPlotter(object):
+    """
+    Demonstrates a basic example of the "scaffolding" you need to efficiently
+    blit drawable artists on top of a background.
+    """
+    def __init__(self):
+        
+        self.fig, self.ax1, self.ax2, self.lines = self.setup_axes()
+
+    def setup_axes(self):
+        """Setup the figure/axes and plot any background artists."""
+        fig = plt.figure(1)
+        axs = fig.add_subplot(1, 1, 1)
+        fig.clf()
+        axs = plt.subplots(1, 2)
+        ax1 : plt.axis = axs[0]
+        ax2 : plt.axis = axs[1]
+        fig.canvas.draw()
+        
+        line1_t, = ax1.plot([], label='train')
+        line1_v, = ax1.plot([], label='val')
+
+        ax1.set_title('Loss vs Iterations')
+        ax1.set_xlabel('Iterations')
+        ax1.set_ylabel('Loss')
+        ax1.grid(True)
+        ax1.autoscale()
+        # ax1.legend()
+
+        line2_t, = ax2.plot([], label='train')
+        line2_v, = ax2.plot([], label='val')
+
+        ax2.set_title('Accuracy vs Iterations')
+        ax2.set_xlabel('Time')
+        ax2.set_ylabel('Percent Accuracy')
+        ax2.grid(True)
+        ax2.autoscale()
+        # ax2.legend()
+
+        lines = [line1_t, line1_v, line2_t, line2_v]
+
+        return fig, ax1, ax2, lines
+
+    def update(self, xdata=[], ydata=[]):
+        """Update the artist for any changes to self.xy."""
+        for i in range(4):
+            self.lines[i].set_data(xdata[i], ydata[i])
+
+        self.blit()
+
+    def blit(self):
+        """
+        Efficiently update the figure, without needing to redraw the
+        "background" artists.
+        """
+        # self.ax1.draw_artist(self.lines[:2])
+        # self.ax2.draw_artist(self.lines[2:4])
+        self.ax1.autoscale()
+        self.ax2.autoscale()
+        self.ax1.redraw_in_frame()
+        self.ax2.redraw_in_frame()
+        self.fig.canvas.blit(self.fig.bbox)
+
 # %% [markdown]
 # ___
 #
@@ -201,15 +279,98 @@ class CancerDataset(Dataset):
 #
 #
 
-
-# class CrossEntropyLoss(nn.Module):
-#     def __init__(self, weight=None, size_average=None, ignore_index=-100,
-#                  reduce=None, reduction='mean'):
-#         self.__dict__.update(locals())
-#         super(CrossEntropyLoss, self).__init__()
-
 # %%
-# You'll probably want a function or something to test input / output sizes of the ConvTranspose2d layer
+"""
+    ########################### DEFINITIONS #####################################
+"""
+# Since you will be using the output of one network in two places(convolution and maxpooling),
+# you can't use nn.Sequential.
+# Instead you will write up the network like normal variable assignment as the example shown below:
+# You are welcome (and encouraged) to use the built-in batch normalization and dropout layer.
+
+class TwoConv2d(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(TwoConv2d, self).__init__()
+
+        self.conv2d = nn.Sequential(nn.Conv2d(in_channels, out_channels, (3,3), padding=(1,1)),
+                                    nn.ReLU(),
+                                    nn.Conv2d(out_channels, out_channels, (3,3), padding=(1,1)),
+                                    nn.ReLU(),
+                                    nn.BatchNorm2d(out_channels) )
+
+    def forward(self, x):
+        return self.conv2d(x)
+
+
+class Upsample(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(Upsample, self).__init__()
+
+        self.upsample = nn.Sequential(
+            nn.ConvTranspose2d(in_channels, out_channels, (4, 4), stride=2, padding=(1,1)),
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+        return self.upsample(x)
+
+
+class DeepUNetwork(nn.Module):
+    def __init__(self, initialization_strategy='xav'):
+        super(DeepUNetwork, self).__init__()
+        out = 2  # number of final output channels; correspond to number of classes
+
+        # do conv transpose; instead of input to output shape size, it's output to input
+
+        # Initialize like this but using ConvBlock
+        self.conv1 = TwoConv2d(3,      64)
+        self.conv2 = TwoConv2d(64,    128)
+        self.conv3 = TwoConv2d(128,   256)
+        self.conv4 = TwoConv2d(256,   512)  
+
+        self.conv5 = TwoConv2d(512,  1024)
+        
+        # upsample
+        self.conv6 = TwoConv2d(1024,  512)
+        # upsample
+        self.conv7 = TwoConv2d(512,   256)
+        # upsample
+        self.conv8 = TwoConv2d(256,   128)
+        # upsample
+        self.conv9 = TwoConv2d(128,    64)
+        self.conv_out = nn.Conv2d(64,    out, (1, 1), padding=(0, 0)) # output segmented map
+
+        self.up_conv6 = Upsample(1024, 512)
+        self.up_conv7 = Upsample( 512, 256)
+        self.up_conv8 = Upsample( 256, 128)
+        self.up_conv9 = Upsample( 128,  64)
+
+        self.max_pool = nn.MaxPool2d(2)
+        
+        # output is 512x512  (what help sesh video says)
+        # padding of 1 keeps numbers more consistent
+        # 3x3x64 filter, 64 unique kernels at beginning, means 64 features from that layer
+        # upscaling - matrix multiplacation, do transpose
+        # accuracy for img sgmntation: intersection over union (IoU metric)
+        # do Sigmoid at end to get probabilities, then compute_accuracy to get 0s or 1s
+
+    def forward(self, x):
+        layer1 = self.conv1(x)  # Output is 64 x 512 x 512
+        layer2 = self.conv2(self.max_pool(layer1))
+        layer3 = self.conv3(self.max_pool(layer2))
+        layer4 = self.conv4(self.max_pool(layer3))
+        
+        layer5 = self.conv5(self.max_pool(layer4))
+
+        layer6 = self.conv6( torch.cat(( layer4, self.up_conv6(layer5) ), dim=1) )
+        layer7 = self.conv7( torch.cat(( layer3, self.up_conv7(layer6) ), dim=1) )
+        layer8 = self.conv8( torch.cat(( layer2, self.up_conv8(layer7) ), dim=1) )
+        layer9 = self.conv9( torch.cat(( layer1, self.up_conv9(layer8) ), dim=1) )
+
+        output_layer: Tensor = self.conv_out(layer9)
+        
+        return output_layer
+
 
 def count_parameters(model):
     total_param = 0
@@ -225,115 +386,29 @@ def count_parameters(model):
     return total_param
 
 
-# %%
-# Since you will be using the output of one network in two places(convolution and maxpooling),
-# you can't use nn.Sequential.
-# Instead you will write up the network like normal variable assignment as the example shown below:
-# You are welcome (and encouraged) to use the built-in batch normalization and dropout layer.
-
-class TwoConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(TwoConv2d, self).__init__()
-
-        self.conv2d = nn.Sequential(nn.Conv2d(in_channels, out_channels, (3,3), padding=(1,1)),
-                                    nn.ReLU(),
-                                    nn.Conv2d(out_channels, out_channels, (3,3), padding=(1,1)),
-                                    nn.ReLU(),
-                                    nn.BatchNorm2d(out_channels)
-                                    )
-
-    def forward(self, x):
-        return self.conv2d(x)
-
-class Upsample(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(Upsample, self).__init__()
-
-        self.upsample = nn.Sequential(nn.ConvTranspose2d(in_channels, out_channels, (3,3), padding=(1,1)),
-                                      nn.ReLU()
-                                      )
-
-    def forward(self, x):
-        return self.upsample(x)
-
-class DeepUNetwork(nn.Module):
-    def __init__(self, dataset, initialization_strategy='xav'):
-        super(DeepUNetwork, self).__init__()
-        x, y = dataset[0]
-        n, c, h, w = x.size()  # c=numchannels, h=height, w=width
-        out = 2  # number of final output channels; correspond to number of classes
-
-        # do conv transpose; instead of input to output shape size, it's output to input
-
-        # Initialize like this but using ConvBlock
-        self.conv0 = TwoConv2d(3,      64)
-        self.conv1 = TwoConv2d(64,    128)
-        self.conv2 = TwoConv2d(128,   256)
-        self.conv3 = TwoConv2d(256,   512)
-        self.conv4 = TwoConv2d(512,  1024)
-        self.conv5 = TwoConv2d(1024,  512)
-        self.conv6 = TwoConv2d(512,   256)
-        self.conv7 = TwoConv2d(256,   128)
-        self.conv8 = TwoConv2d(128,    64)
-        self.conv9 = nn.Conv2d(64,    out, (1, 1), padding=(0, 0))
-
-        self.transpose_conv0 = Upsample(1024, 512)
-        self.transpose_conv1 = Upsample( 512, 256)
-        self.transpose_conv2 = Upsample( 256, 128)
-        self.transpose_conv3 = Upsample( 128,  64)
-
-        self.max_pool = nn.MaxPool2d(2)
-        
-        # output is 512x512  (what help sesh video says)
-        # padding of 1 keeps numbers more consistent
-        # 3x3x64 filter, 64 unique kernels at beginning, means 64 features from that layer
-        # upscaling - matrix multiplacation, do transpose
-        # accuracy for img sgmntation: intersection over union (IoU metric)
-        # do Sigmoid at end to get probabilities, then compute_accuracy to get 0s or 1s
-
-    def forward(self, x):
-        # n, c, h, w = x.size()
-        gc.collect()
-        # torch.cuda.empty_cache()
-
-        # torch.cat((o0, o0), 1)  # concat convolvs along channel axis
-        layer0 = self.conv0(x)  # Output is 64 x 512 x 512
-        layer1 = self.conv1(self.max_pool(layer0))
-        layer2 = self.conv2(self.max_pool(layer7))
-        layer7 = self.conv7(torch.cat((layer2, self.transpose_conv2(layer2)), 1))
-        layer8 = self.conv8(torch.cat((layer1, self.transpose_conv3(layer7)), 1))
-        layer8 = self.conv3(self.max_pool(layer9))
-        layer9 = self.conv9(layer8)
-
-        return layer9
-
-class FashionMNISTProcessedDataset(Dataset):
-    def __init__(self, root, train=True):
-        self.data = datasets.FashionMNIST(root,
-                                          train=train,
-                                          transform=transforms.ToTensor(),
-                                          download=True)
-
-    def __getitem__(self, i):
-        x, y = self.data[i]
-        return x, y
-
-    def __len__(self):
-        return len(self.data)  # 100
+def compute_accuracy(y_hat: Tensor, y_truth: Tensor):
+    # 8 x (2 x 512 x 512)  y_hat
+    # 8 x (    512 x 512)  y_truth
+    y_hat_hot = torch.argmax(y_hat, dim=1)
+    result = y_hat_hot.byte() ^ y_truth.byte()
+    accuracy = 1 - torch.sum( result ).item() / result.numel() 
+    return accuracy
 
 
 # %%
+"""
+    ########################### INITIALIZATION #####################################
+"""
 # Create your datasets and neural network as you have before
-
-########################### CREATE DATASETS AND NN #####################################
 
 try:
     # your code for calling dataset and dataloader
-    train_dataset = FashionMNISTProcessedDataset(
-        '/home/seth/Downloads/fasionmnist', train=True)
-    val_dataset = FashionMNISTProcessedDataset(
-        '/home/seth/Downloads/fasionmnist', train=False)
-    model = DeepUNetwork(train_dataset).cuda()
+    train_dataset = CancerDataset(
+        '/home/seth/Downloads', download=False, train=True, size=256)
+    val_dataset = CancerDataset(
+        '/home/seth/Downloads', download=False, train=False, size=256)
+    
+    model = DeepUNetwork(train_dataset).cuda(0)
     
     # Compute and print the number of parameters in the model
     # print('number of trainable parameters =', count_parameters(model))
@@ -341,83 +416,79 @@ try:
     objective = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
-    batch_size = 8
+    batch_size = 12
     train_loader = DataLoader(train_dataset,
                               batch_size=batch_size,
                               shuffle=True,
-                              num_workers=8,
+                              num_workers=4,
                               pin_memory=True)
     val_loader = DataLoader(val_dataset,
-                            shuffle=True, 
                             batch_size=batch_size,
-                            num_workers=8,
+                            shuffle=False, 
+                            num_workers=4,
                             pin_memory=True)
 
-except:
-    __ITB__()
+                            
 
-# %%
+    
+except Exception as e:
+    # __ITB__()
+    print(traceback.format_exc())
+    sys.exit(e)
 
-def compute_accuracy(y_hat, y_truth):
-    # 1 x (2 x 512 x 512)
-    # 1 x (1 x 512 x 512)
-    y_hat = y_hat[0]
-    y_truth = y_truth[0]
-    y_hat[0] = y_hat[0] > 0.5  # first channel image
-    y_hat[1] = y_hat[1] < 0.5  # second channel image
-    intersection = torch.sum(y_hat[0] * y_truth)
-    union = torch.sum(y_hat[0] + y_truth >= 1)
-    return intersection/union
+#%%
+"""
+    ########################### START MAIN #####################################
+"""
 
-train_loss_hist = []
-train_accuracy_hist = []
-val_loss_hist = []
-val_accuracy_hist = []
-
-val_losses = []
-val_accuracies = []
-
-val_interval = 50  # num of iterations between validation tests
-val_loss_mean = 0
-val_accuracy_mean = 0
-
-num_epochs = 5
-t_len = len(train_loader)
-v_len = len(val_loader)
-loops_per_epoch = t_len + (t_len // val_interval + 1) * (v_len-1)
-
-gc.collect()
-torch.cuda.empty_cache()
-print(torch.cuda.memory_allocated(0) / 1e9)
-
-time_start = time.time()
 try:
+    train_loss_hist: List[float] = []
+    train_accuracy_hist: List[float] = []
+    val_loss_x: List[float] = []
+    val_loss_y: List[float] = []
+    val_accuracy_x: List[float] = []
+    val_accuracy_y: List[float] = []
+
+    val_losses: List[float] = []
+    val_accuracies: List[float] = []
+
+    val_interval = 50  # num of iterations between validation tests
+    val_loss_mean = 0
+    val_accuracy_mean = 0
+
+    num_epochs = 6
+    iteration_count = 0
+    t_len = len(train_loader)
+    v_len = len(val_loader)
+    loops_per_epoch = t_len + (t_len // val_interval + 1) * v_len
+
+    # dp = DeepPlotter()
+    # # time_arr = np.arange(loops_per_epoch*num_epochs)
+    # time_arr = []
+    # xdata = [time_arr, val_loss_x, time_arr, val_accuracy_x]
+    # ydata = [train_loss_hist, val_loss_y, train_accuracy_hist, val_accuracy_y]
+    
+    time_start = time.time()
     # Call your model, figure out loss and accuracy
     for epoch in range(num_epochs):
 
         loop = tqdm(total=loops_per_epoch, position=0, leave=False)
 
-        for loop_count, (x, y_truth) in enumerate(train_loader):
+        for batch_num, (x, y_truth) in enumerate(train_loader):
             x, y_truth = x.cuda(async=True), y_truth.cuda(async=True)
 
             optimizer.zero_grad()
             y_hat = model(x)
             
             # Accuracy calculation
-            train_accuracy = compute_accuracy(y_hat, y)
-            train_accuracy_hist.append(train_accuracy)
+            train_accuracy = compute_accuracy(y_hat, y_truth)
 
             # Add to loss and scores histories
-            loss = objective(y_hat, y_truth.long)
-            train_loss_hist.append(loss.item())
+            loss = objective(y_hat, y_truth.long())
 
             # Update tqdm display
-            print(torch.cuda.memory_allocated(0) / 1e9)
             loop.set_description(
-                f'epoch:{epoch}, \
-                loss:{loss.item():.4f}, \
-                train_accuracy:{train_accuracy:.3f}, \
-                mem:{mem:.2f}')
+                f'epoch:{epoch+1}, loss:{loss.item():.2f}, train_accuracy:{train_accuracy:.3f}')
             loop.update()
 
             loss.backward()
@@ -425,33 +496,53 @@ try:
 
 
             # Validation section
-            if loop_count != 0 and loop_count % val_interval == 0:
+            if batch_num % val_interval == 0:
 
-                for i, (x_val, y_truth_val) in enumerate(val_loader):
+                with torch.no_grad():
+                    val_losses = []
+                    val_accuracies = []
+                    for i, (x_val, y_truth_val) in enumerate(val_loader):
 
-                    x_val, y_truth_val = x_val.cuda(async=True),  \
-                                         y_truth_val.cuda(async=True)
-                    y_hat_val = model(x_val)
-                    val_losses.append(objective(y_hat_val, y_truth_val).item())
-                    val_accuracies.append(compute_accuracy(y_hat_val, y_truth_val))
-                    loop.update()
+                        x_val, y_truth_val = x_val.cuda(async=True),  \
+                                            y_truth_val.cuda(async=True)
+                        y_hat_val = model(x_val)
+                        val_losses.append(objective(y_hat_val, y_truth_val.long()).item())
+                        val_accuracies.append(compute_accuracy(y_hat_val, y_truth_val))
+                        loop.update()
+                    
+                    val_loss_mean = np.mean(val_losses)
+                    val_accuracy_mean = np.mean(val_accuracies)
 
-                val_loss_mean = np.mean(val_losses)
-                val_accuracy_mean = np.mean(val_accuracies)
+                    val_loss_x.append(iteration_count)
+                    val_loss_y.append(val_loss_mean)
+                    val_accuracy_x.append(iteration_count)
+                    val_accuracy_y.append(val_accuracy_mean)
 
-            val_loss_hist.append(val_loss_mean)
-            val_accuracy_hist.append(val_score_mean)
+            # train_time_arr = time_arr[:iteration_count]
+            # xdata = [train_time_arr, val_loss_x, train_time_arr, val_accuracy_x]
+            # ydata = [train_loss_hist, val_loss_x, train_time_arr, val_accuracy_x]
 
-    loop.update()
+            # Update plot 
+            # time_arr.append(iteration_count)
+            train_loss_hist.append(loss.item())
+            train_accuracy_hist.append(train_accuracy)
+            
+            # dp.update(xdata, ydata)
+            
+            # end of loop
+            iteration_count += 1
+
     elapsed_time = time.time() - time_start
     loop.update()
     loop.close()
 
-except:
-    __ITB__()
-    exit(0)
+except Exception as e:
+    # __ITB__()
+    print(traceback.format_exc())
+    sys.exit(e)
 
 # %% [markdown]
+
 #
 # ___
 #
@@ -470,19 +561,16 @@ except:
 
 # %%
 # Your plotting code here
-import seaborn as sns
-sns.set_style('whitegrid')
-custom = sns.color_palette("Paired", 9)
-sns.set_palette(custom)
-sns.set()
+print(f'\n   --- Total time elapsed: \t{elapsed_time:.2f}\t---')
+print(f'   --- Number of iterations: \t{iteration_count}\t---')
+print(f'   --- Avg speed (it/s): \t{(iteration_count/elapsed_time):.2f}\t---')
+print(f'   --- Avg duration (s/epoch): \t{(elapsed_time/num_epochs):.2f}\t---\n')
 
-print(f'\n   --- Total time elapsed: {elapsed_time:.2f} ---\n')
-
-plt.rcParams['figure.figsize'] = [35, 10]
+plt.rcParams['figure.figsize'] = [10, 4]
 fig, axs = plt.subplots(1, 2)
 
 axs[0].plot(train_loss_hist, label='train')
-axs[0].plot(val_loss_hist, label='val')
+axs[0].plot(val_loss_x, val_loss_y, label='val')
 axs[0].legend()
 axs[0].set_title('Loss')
 axs[0].set_xlabel('Time')
@@ -490,15 +578,12 @@ axs[0].set_ylabel('Loss')
 axs[0].grid(True)
 
 axs[1].plot(train_accuracy_hist, label='train')
-axs[1].plot(val_accuracy_hist, label='val')
+axs[1].plot(val_accuracy_x, val_accuracy_y, label='val')
 axs[1].legend()
 axs[1].set_title('Accuracy')
 axs[1].set_xlabel('Time')
 axs[1].set_ylabel('Percent accuracy')
 axs[1].grid(True)
-
-
-plt.show()
 
 # %% [markdown]
 # ___
@@ -527,3 +612,23 @@ plt.show()
 
 # %%
 # Code for testing prediction on an image
+test_img, label = val_dataset[172]
+y_test = model( test_img.cuda(async=True).unsqueeze(0) )
+y_test = y_test.detach().squeeze().cpu().numpy()
+y_test_hot = torch.argmax(Tensor(y_test), dim=0)
+result = y_test_hot.byte() ^ label.byte()
+accuracy_final = 1 - torch.sum( result ).item() / result.numel() 
+
+print(f'\n   --- Score for test image: {accuracy_final:.3f} ---\n')
+
+# Plot the result
+plt.rcParams["axes.grid"] = False
+fig2 = plt.figure(2)
+ax_im = fig2.add_subplot(1, 1, 1)
+ax_im.imshow(y_test_hot, interpolation='nearest', cmap='gray')
+ax_im.set_title('Cancer Detection - Test Result')
+
+plt.show()
+
+
+#%%
