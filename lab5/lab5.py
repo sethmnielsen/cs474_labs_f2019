@@ -53,6 +53,7 @@ from torch import Tensor
 import numpy as np
 import matplotlib.pyplot as plt
 from torchvision import transforms, utils, datasets
+
 from tqdm import tqdm
 from torch.nn.parameter import Parameter
 import pdb
@@ -66,7 +67,7 @@ import io
 from IPython.core.ultratb import AutoFormattedTB
 __ITB__ = AutoFormattedTB(mode='Verbose', color_scheme='LightBg', tb_offset=1)
 
-
+# from google.colab import files
 # %%
 
 load_and_normalize = transforms.Compose([
@@ -90,6 +91,7 @@ content_path = "/home/seth/Pictures/style_transfer/iss043e93251_lrg.jpg"
 style_path = "/home/seth/Pictures/style_transfer/modernism.jpg"
 print(f"Content Path: {content_path}")
 print(f"Style Path: {style_path}")
+
 
 
 # %%
@@ -164,13 +166,13 @@ style_inds = [vgg_names.index("conv1_1"), vgg_names.index("conv2_1"), vgg_names.
     "conv3_1"), vgg_names.index("conv4_1"), vgg_names.index("conv5_1")]
 
 # Create the vgg network in eval mode
-#  with our forward method that returns the outputs of the intermediate layers we requested
-style_vgg = VGGIntermediate(style_inds)
-content_vgg = VGGIntermediate(content_inds)
+# #  with our forward method that returns the outputs of the intermediate layers we requested
+# style_vgg = VGGIntermediate(style_inds)
+# content_vgg = VGGIntermediate(content_inds)
 
-# Cache the outputs of the content and style layers for their respective images
-style_layers = style_vgg(style_image)
-content_layers = content_vgg(content_image)
+# # Cache the outputs of the content and style layers for their respective images
+# style_layers = style_vgg(style_image)
+# content_layers = content_vgg(content_image)
 
 
 # %% [markdown]
@@ -264,7 +266,7 @@ class StyleLoss(nn.Module):
         loss = 0
         for l, key in enumerate(activations.keys()):
             G = gram_matrix(activations[key])
-            loss += F.mse_loss( G, self.grams[l] ) / len(activations)
+            loss += F.mse_loss( G, self.gees[l] ) / len(activations)
         return loss
 
 # Instantiate a content loss module for each content layer
