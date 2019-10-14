@@ -165,12 +165,12 @@ style_inds = [vgg_names.index("conv1_1"), vgg_names.index("conv2_1"), vgg_names.
 
 # Create the vgg network in eval mode
 #  with our forward method that returns the outputs of the intermediate layers we requested
-style_vgg = VGGIntermediate(style_inds)
-content_vgg = VGGIntermediate(content_inds)
+# style_vgg = VGGIntermediate(style_inds)
+# content_vgg = VGGIntermediate(content_inds)
 
-# Cache the outputs of the content and style layers for their respective images
-style_layers = style_vgg(style_image)
-content_layers = content_vgg(content_image)
+# # Cache the outputs of the content and style layers for their respective images
+# style_layers = style_vgg(style_image)
+# content_layers = content_vgg(content_image)
 
 
 # %% [markdown]
