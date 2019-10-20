@@ -11,6 +11,7 @@ import re
 import random
 import string
 import unidecode
+from IPython.core.debugger import Pdb
 from IPython import get_ipython
 
 # %% [markdown]
@@ -126,18 +127,35 @@ print(char_tensor('abcDEF'))
 
 
 class GRU(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers):
+    def __init__(self, input_size, hidden_size, num_layers=1):
         super(GRU, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        full_input_size = input_size + hidden_size
+        self.Wr = nn.Linear(full_input_size, hidden_size)
+        self.Wz = nn.Linear(full_input_size, hidden_size)
+        self.W = nn.Linear(full_input_size, hidden_size)
+
+        self.sigmo = nn.Sigmoid()
+        self.tanh = nn.Tanh()
+
+        # Do stuff to make more layers here
 
     def forward(self, inputs, hidden):
-        # Each layer does the following:
-        # r_t = sigmoid(W_ir*x_t + b_ir + W_hr*h_(t-1) + b_hr)
-        # z_t = sigmoid(W_iz*x_t + b_iz + W_hz*h_(t-1) + b_hz)
-        # n_t = tanh(W_in*x_t + b_in + r_t**(W_hn*h_(t-1) + b_hn))
-        # h_(t) = (1 - z_t)**n_t + z_t**h_(t-1)
-        # Where ** is hadamard product (not matrix multiplication, but elementwise multiplication)
+        xt = inputs
+        ht_prev = hidden
+        rt = self.sigmo( self.Wr( torch.cat((xt, ht_prev),dim=2) ) )
+        zt = self.sigmo( self.Wz( torch.cat((xt, ht_prev),dim=2) ) )
+        rh_prev = torch.mul(rt, ht_prev)
+        w = self.W ( torch.cat((rh_prev, xt),dim=2) )
+        ht = torch.tanh(w)
+        out_decoded = ht # check to make sure this is right
+        hidden = ht
+        return out_decoded, hidden
 
-        return outputs, hiddens
+
 
 
 # %% [markdown]
@@ -176,7 +194,6 @@ class RNN(nn.Module):
     def forward(self, input_char, hidden):
         # by reviewing the documentation, construct a forward function that properly uses the output
         # of the GRU
-
         embedded = self.embedding(input_char).view(1,1,-1)
         output = embedded
         out_decoded, hidden = self.gru(output, hidden)
@@ -215,15 +232,21 @@ def random_training_set():
 # %%
 
 
-def train(inp, target):
+def train(inp, target, decoder, decoder_optimizer, criterion):
     # initialize hidden layers, set up gradient and loss
-    decoder.init_hidden()
-    # /
     decoder_optimizer.zero_grad()
     hidden = decoder.init_hidden()
     loss = 0
 
-    # more stuff here...
+    for char_in, char_target in zip(inp, target):
+        char_decoded = decoder(char_in, hidden)
+        loss += criterion(char_decoded.squeeze(0), char_target.unsqueeze(0))
+
+    loss.backward()
+    decoder_optimizer.step()
+
+    loss_score = loss.item()/len(inp)
+    return loss_score
 
 # %% [markdown]
 # ---
@@ -246,10 +269,26 @@ def train(inp, target):
 # %%
 
 
-def evaluate(prime_str='A', predict_len=100, temperature=0.8):
+def evaluate(decoder=None, prime_str='A', predict_len=100, temperature=0.8):
     # initialize hidden variable, initialize other useful variables
-        # your code here
-    # /
+    decoder.init_hidden()
+    prime_chars = char_tensor(prime_str)
+
+    for k in range( len(prime_chars)-1 ):
+        out, hidden = decoder(prime_chars[i], hidden)
+    eval_char = prime_chars[-1]
+
+    prediction = prime_str
+    for k in range(predict_len):
+        out, hidden = decoder(eval_char, )
+        prob_distrib = out.data.view(-1).div(temperature).exp()
+        select_ind = torch.multinomial(prob_distrib, 1)[0]
+
+        char_choice = all_characters[select_ind]
+        eval_char = char_tensor(char_choice)
+        prediction += char_choice
+
+    return prediction
 
 # %% [markdown]
 # ---
@@ -280,7 +319,7 @@ n_epochs = 5000
 print_every = 200
 plot_every = 10
 hidden_size = 200
-n_layers = 3
+n_layers = 1
 lr = 0.001
 
 decoder = RNN(n_characters, hidden_size, n_characters, n_layers)
@@ -291,11 +330,9 @@ start = time.time()
 all_losses = []
 loss_avg = 0
 
-
 # %%
-# n_epochs = 2000
 for epoch in range(1, n_epochs + 1):
-    loss_ = train(*random_training_set())
+    loss_ = train( *random_training_set(), decoder, decoder_optimizer, criterion)
     loss_avg += loss_
 
     if epoch % print_every == 0:
