@@ -1,6 +1,12 @@
 # To add a new cell, type '#%%'
 # To add a new markdown cell, type '#%% [markdown]'
 # %%
+
+# get_ipython().system(" wget -O ./text_files.tar.gz 'https://piazza.com/redirect/s3?bucket=uploads&prefix=attach%2Fjlifkda6h0x5bk%2Fhzosotq4zil49m%2Fjn13x09arfeb%2Ftext_files.tar.gz' ")
+# get_ipython().system(' tar -xzf text_files.tar.gz')
+# get_ipython().system(' pip install unidecode')
+# get_ipython().system(' pip install torch')
+
 import time
 import torch.nn.functional as F
 from torch import nn
@@ -65,11 +71,6 @@ from IPython import get_ipython
 #
 
 # %%
-# get_ipython().system(" wget -O ./text_files.tar.gz 'https://piazza.com/redirect/s3?bucket=uploads&prefix=attach%2Fjlifkda6h0x5bk%2Fhzosotq4zil49m%2Fjn13x09arfeb%2Ftext_files.tar.gz' ")
-# get_ipython().system(' tar -xzf text_files.tar.gz')
-# get_ipython().system(' pip install unidecode')
-# get_ipython().system(' pip install torch')
-
 
 all_characters = string.printable
 n_characters = len(all_characters)
@@ -84,7 +85,13 @@ chunk_len = 200
 
 
 def random_chunk():
-    start_index = random.randint(0, file_len - chunk_len)
+    crop_index = 0
+    start_index = random.randint(crop_index, file_len - chunk_len)
+    for k in range(chunk_len):
+        start_char = file[start_index + k]
+        if start_char == ".":
+            start_index += k + 2
+            break
     end_index = start_index + chunk_len + 1
     return file[start_index:end_index]
 
@@ -99,6 +106,8 @@ def random_training_set():
     chunk = chunk.replace('[', ' ')
     chunk = chunk.replace(']', ' ')
     chunk = chunk.replace('~', '')
+    chunk = chunk.replace('\"', '')
+    chunk = chunk.replace('\'', '')
     inp_str = chunk[:-1]
     target_str = chunk[1:]
     return inp_str, target_str, chunk
@@ -255,7 +264,7 @@ class GRU(nn.Module):
 
 # %%
 class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, n_layers=3):
+    def __init__(self, input_size, hidden_size, output_size, n_layers=1):
         super(RNN, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -358,8 +367,8 @@ def evaluate(decoder=None, prime_str='A', predict_len=200, temperature=0.8):
     prediction = prime_str
     for k in range(predict_len):
         out, hidden = decoder(eval_char, hidden)
-        prob_distrib = out.data.view(-1).div(temperature).exp()
-        select_ind = torch.multinomial(prob_distrib, 1)[0]
+        prob_distrib = F.softmax(out / temperature, dim=2)
+        select_ind = torch.multinomial(prob_distrib.view(-1), 1)[0]
 
         char_choice = all_characters[select_ind]
         eval_char = char_tensor(char_choice)
@@ -392,47 +401,60 @@ def evaluate(decoder=None, prime_str='A', predict_len=200, temperature=0.8):
 #
 
 # %%
-n_epochs = 5000
-print_every = 200
-plot_every = 10
-info_every = 50
+def main_loop(decoder: RNN):
+    n_epochs = 5000
+    print_every = 200
+    plot_every = 10
+    info_every = 50
+    lr = 0.001
+
+    decoder_optimizer = torch.optim.Adam(decoder.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss()
+
+    start = time.time()
+    all_losses = []
+    loss_avg = 0
+
+    # begin loop
+    for epoch in range(1, n_epochs + 1):
+        loss_ = train( *random_training_set(), decoder, decoder_optimizer, criterion)
+        loss_avg += loss_
+
+        if epoch % print_every == 0:
+            print('[%s (%d %d%%) %.4f]' %
+                (time.time() - start, epoch, epoch / n_epochs * 100, loss_))
+            print(evaluate(decoder, 'Wh', 200), '\n')
+
+        if epoch % plot_every == 0:
+            all_losses.append(loss_avg / plot_every)
+            loss_avg = 0
+
+        if epoch % info_every == 0:
+            print(f'epoch {epoch} done.')
+    
+
+
+# %%
+def produce_samples(decoder: RNN):
+    for i in range(10):
+        start_strings = [" Th", " wh", " he", " I ", " ca", " G", " lo", " ra"]
+        start = random.randint(0, len(start_strings)-1)
+        print(start_strings[start])
+    #   all_characters.index(string[c])
+        print(evaluate(decoder, start_strings[start], 200), '\n')
+
+# %%
+
 hidden_size = 100
 n_layers = 1
-lr = 0.001
-
 decoder = RNN(chunk_len, hidden_size, n_characters, n_layers)
-decoder_optimizer = torch.optim.Adam(decoder.parameters(), lr=lr)
-criterion = nn.CrossEntropyLoss()
 
-start = time.time()
-all_losses = []
-loss_avg = 0
+main_loop(decoder)
 
 # %%
-for epoch in range(1, n_epochs + 1):
-    loss_ = train( *random_training_set(), decoder, decoder_optimizer, criterion)
-    loss_avg += loss_
 
-    if epoch % print_every == 0:
-        print('[%s (%d %d%%) %.4f]' %
-              (time.time() - start, epoch, epoch / n_epochs * 100, loss_))
-        print(evaluate(decoder, 'ab', 200), '\n')
+produce_samples(decoder)
 
-    if epoch % plot_every == 0:
-        all_losses.append(loss_avg / plot_every)
-        loss_avg = 0
-
-    if epoch % info_every == 0:
-        print(f'epoch {epoch} done.')
-
-
-# %%
-for i in range(10):
-    start_strings = [" Th", " wh", " he", " I ", " ca", " G", " lo", " ra"]
-    start = random.randint(0, len(start_strings)-1)
-    print(start_strings[start])
-#   all_characters.index(string[c])
-    print(evaluate(decoder, start_strings[start], 200), '\n')
 
 # %% [markdown]
 # ---
