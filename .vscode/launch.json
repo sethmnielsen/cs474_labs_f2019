@@ -24,7 +24,7 @@
                     "remoteRoot": "."
                 }
             ],
-            "justMyCode": false
+            "justMyCode": true
         },
         {
             "name": "Python: Module",
