@@ -89,6 +89,7 @@ def random_chunk():
     start_index = random.randint(crop_index, file_len - chunk_len)
     for k in range(chunk_len):
         start_char = file[start_index + k]
+
         if start_char == ".":
             start_index += k + 2
             break
@@ -108,6 +109,8 @@ def random_training_set():
     chunk = chunk.replace('~', '')
     chunk = chunk.replace('\"', '')
     chunk = chunk.replace('\'', '')
+    chunk = chunk.replace('\r', ' ')
+    chunk = chunk.replace('/', ' ')
     inp_str = chunk[:-1]
     target_str = chunk[1:]
     return inp_str, target_str, chunk
@@ -166,44 +169,8 @@ class GRU(nn.Module):
         self.w_hz = nn.Linear(input_size, hidden_size)
         self.w_hn = nn.Linear(input_size, hidden_size)
 
-        # full_input_size = input_size + hidden_size
-        # self.Wr = nn.Linear(full_input_size, hidden_size)
-        # self.Wz = nn.Linear(full_input_size, hidden_size)
-        # self.W  = nn.Linear(full_input_size, hidden_size)
 
-        # Weights
-        # k = np.sqrt(1/input_size)
-        # wir0 = torch.Tensor(np.random.uniform(-k, k, (hidden_size, input_size)))
-        # wiz0 = torch.Tensor(np.random.uniform(-k, k, (hidden_size, input_size)))
-        # win0 = torch.Tensor(np.random.uniform(-k, k, (hidden_size, input_size)))
-        # whr0 = torch.Tensor(np.random.uniform(-k, k, (hidden_size, input_size)))
-        # whz0 = torch.Tensor(np.random.uniform(-k, k, (hidden_size, input_size)))
-        # whn0 = torch.Tensor(np.random.uniform(-k, k, (hidden_size, input_size)))
-
-        # self.w_ir = nn.Parameter(wir0, requires_grad=True)
-        # self.w_iz = nn.Parameter(wiz0, requires_grad=True)
-        # self.w_in = nn.Parameter(win0, requires_grad=True)
-        # self.w_hr = nn.Parameter(whr0, requires_grad=True)
-        # self.w_hz = nn.Parameter(whz0, requires_grad=True)
-        # self.w_hn = nn.Parameter(whn0, requires_grad=True)
-
-        # # Biases
-        # bir0 = torch.Tensor(np.random.uniform(-k, k, hidden_size))
-        # biz0 = torch.Tensor(np.random.uniform(-k, k, hidden_size))
-        # bin0 = torch.Tensor(np.random.uniform(-k, k, hidden_size))
-        # bhr0 = torch.Tensor(np.random.uniform(-k, k, hidden_size))
-        # bhz0 = torch.Tensor(np.random.uniform(-k, k, hidden_size))
-        # bhn0 = torch.Tensor(np.random.uniform(-k, k, hidden_size))
-
-        # self.b_ir = nn.Parameter(bir0, requires_grad=True)
-        # self.b_iz = nn.Parameter(biz0, requires_grad=True)
-        # self.b_in = nn.Parameter(bin0, requires_grad=True)
-        # self.b_hr = nn.Parameter(bhr0, requires_grad=True)
-        # self.b_hz = nn.Parameter(bhz0, requires_grad=True)
-        # self.b_hn = nn.Parameter(bhn0, requires_grad=True)
-
-
-    def forward(self, inputs, hidden: torch.Tensor):
+    def forward(self, inputs, hidden):
         xt = inputs
         h_prev = hidden
 
@@ -215,17 +182,6 @@ class GRU(nn.Module):
         nt = self.tanh( torch.mul( n_inp, n_hid ) )
 
         ht = torch.mul( (1 - zt), nt ) + torch.mul( zt, h_prev )
-        
-
-        # rt = self.sigmo( torch.matmul(xt, self.w_ir.T) + self.b_ir + torch.matmul( h_prev, self.w_hr.T) + self.b_hr)
-        # zt = self.sigmo( torch.matmul(xt, self.w_iz.T) + self.b_iz + torch.matmul( h_prev, self.w_hz.T) + self.b_hz)
-
-        # n_inp = torch.matmul(xt, self.w_in.T) + self.b_in + rt
-        # n_hid = torch.matmul(h_prev, self.w_hn.T) + self.b_hn
-        # nt = self.tanh( torch.mul(n_inp, n_hid) )
-
-        # ht = torch.mul( (1 - zt), nt ) + torch.mul( zt, h_prev )
-        
         out_decoded = ht
         hidden = ht
 
@@ -323,8 +279,8 @@ def train(inp, target, chunk, decoder, decoder_optimizer, criterion):
     loss = 0
 
     for char_in, char_target in zip(input_tensor, target_tensor):
-        char_decoded = decoder(char_in, hidden)
-        char_out = char_decoded[0].squeeze(0)
+        char_decoded, hidden = decoder(char_in, hidden)
+        char_out = char_decoded.squeeze(0)
         char_correct = char_target.unsqueeze(0)
         loss += criterion(char_out, char_correct)
 
@@ -355,7 +311,7 @@ def train(inp, target, chunk, decoder, decoder_optimizer, criterion):
 # %%
 
 
-def evaluate(decoder=None, prime_str='A', predict_len=200, temperature=0.8):
+def evaluate(decoder=None, prime_str='A', predict_len=200, temperature=0.4):
     # initialize hidden variable, initialize other useful variables
     hidden = decoder.init_hidden()
     prime_chars = char_tensor(prime_str)
@@ -402,11 +358,13 @@ def evaluate(decoder=None, prime_str='A', predict_len=200, temperature=0.8):
 
 # %%
 def main_loop(decoder: RNN):
-    n_epochs = 5000
+    n_epochs = 50000
     print_every = 200
     plot_every = 10
     info_every = 50
     lr = 0.001
+    start_strings = [" Th", " wh", " he", " I ", " ca", " G", " lo", " ra", "fo", "Fi", "We"]
+
 
     decoder_optimizer = torch.optim.Adam(decoder.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
@@ -421,9 +379,11 @@ def main_loop(decoder: RNN):
         loss_avg += loss_
 
         if epoch % print_every == 0:
+            start = random.randint(0, len(start_strings)-1)
+            primer_str = start_strings[start]
             print('[%s (%d %d%%) %.4f]' %
                 (time.time() - start, epoch, epoch / n_epochs * 100, loss_))
-            print(evaluate(decoder, 'Wh', 200), '\n')
+            print(evaluate(decoder, primer_str, 200), '\n')
 
         if epoch % plot_every == 0:
             all_losses.append(loss_avg / plot_every)
@@ -445,8 +405,8 @@ def produce_samples(decoder: RNN):
 
 # %%
 
-hidden_size = 100
-n_layers = 1
+hidden_size = 400
+n_layers = 5
 decoder = RNN(chunk_len, hidden_size, n_characters, n_layers)
 
 main_loop(decoder)
