@@ -77,7 +77,7 @@ good_characters = good_characters[:64]
 good_characters += "()\',-.;?: \t\n\r"
 n_characters = len(good_characters)
 # file = unidecode.unidecode(open('./text_files/abcd.txt').read())
-file = unidecode.unidecode(open('./text_files/starwars_data.txt').read())
+file = unidecode.unidecode(open('../text_files/starwars_data.txt').read())
 file_len = len(file)
 print('file_len =', file_len)
 
@@ -122,7 +122,7 @@ def random_training_set():
 
 
 def char_tensor(string: str):
-    tensor = torch.zeros(len(string)).long()
+    tensor = torch.zeros(len(string)).long().cuda(0)
     for c in range(len(string)):
         tensor[c] = good_characters.index(string[c])
     return Variable(tensor)
@@ -245,7 +245,7 @@ class RNN(nn.Module):
         return out_decoded, hidden
 
     def init_hidden(self):
-        return Variable(torch.zeros(self.n_layers, 1, self.hidden_size))
+        return Variable(torch.zeros(self.n_layers, 1, self.hidden_size).cuda(0))
 
 
 
@@ -409,7 +409,7 @@ def produce_samples(decoder: RNN):
 
 hidden_size = 400
 n_layers = 5
-decoder = RNN(chunk_len, hidden_size, n_characters, n_layers)
+decoder = RNN(chunk_len, hidden_size, n_characters, n_layers).cuda(0)
 
 main_loop(decoder)
 
