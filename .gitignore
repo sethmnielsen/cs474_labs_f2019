@@ -3,3 +3,4 @@
 *.png
 *.jpg
 *char-rnn-pytorch
+*.pt

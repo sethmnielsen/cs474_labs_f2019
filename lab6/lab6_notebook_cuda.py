@@ -312,7 +312,7 @@ def train(inp, target, chunk, decoder, decoder_optimizer, criterion):
 # %%
 
 
-def evaluate(decoder=None, prime_str='A', predict_len=200, temperature=0.6):
+def evaluate(decoder=None, prime_str='A', predict_len=200, temperature=0.8):
     # initialize hidden variable, initialize other useful variables
     hidden = decoder.init_hidden()
     prime_chars = char_tensor(prime_str)
@@ -400,7 +400,7 @@ def main_loop(decoder: RNN):
 def produce_samples(decoder: RNN):
     for i in range(10):
         start_strings = [" Th", " wh", " he", " I ", " ca", " Go", " lo", " ra", "fo", "Fi", "We", " je", " li"]
-        start = random.randint(0, len(start_strings)-1)
+        start = i
         print(start_strings[start])
     #   good_characters.index(string[c])
         print(evaluate(decoder, start_strings[start], 200), '\n')
@@ -414,9 +414,12 @@ decoder = RNN(chunk_len, hidden_size, n_characters, n_layers).cuda(0)
 main_loop(decoder)
 
 # %%
-
+decoder.eval()
 produce_samples(decoder)
 
+# %%
+
+torch.save(decoder.state_dict(), 'char_rnn_starwars.pt')
 
 # %% [markdown]
 # ---
