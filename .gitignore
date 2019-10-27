@@ -4,3 +4,4 @@
 *.jpg
 *char-rnn-pytorch
 *.pt
+text_files
