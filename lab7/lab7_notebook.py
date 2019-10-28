@@ -3,62 +3,66 @@
 # %%
 from IPython import get_ipython
 
+
+# %%
+from IPython import get_ipython
+
 # %% [markdown]
-# <a 
-# href="https://colab.research.google.com/github/wingated/cs474_labs_f2019/blob/master/DL_Lab7.ipynb"
-#   target="_parent">
-#   <img
-#     src="https://colab.research.google.com/assets/colab-badge.svg"
-#     alt="Open In Colab"/>
-# </a>
+#  <a
+#  href="https://colab.research.google.com/github/wingated/cs474_labs_f2019/blob/master/DL_Lab7.ipynb"
+#    target="_parent">
+#    <img
+#      src="https://colab.research.google.com/assets/colab-badge.svg"
+#      alt="Open In Colab"/>
+#  </a>
 # %% [markdown]
-# # Lab 7: The Transformer
-# ### Description:
-# For this lab, you will fill in the attention mechanism for the Transformer architecture. 
+#  # Lab 7: The Transformer
+#  ### Description:
+#  For this lab, you will fill in the attention mechanism for the Transformer architecture.
 # 
-# There are three parts of this lab:
-# 1. Implement scaled dot-product attention
-# 2. Implement a multi-headded attention mechanism
-# 3. Translate general conference!
+#  There are three parts of this lab:
+#  1. Implement scaled dot-product attention
+#  2. Implement a multi-headded attention mechanism
+#  3. Translate general conference!
 # 
 # 
-# ### Grading standards
+#  ### Grading standards
 # 
-# Your code will be graded on the following:
+#  Your code will be graded on the following:
 # 
-# - 45% Implementation of scaled dot-product attention
-# - 45% Implementation of multi-headed attention mechanism
-# - 10% Reasonable translation of general conference
+#  - 45% Implementation of scaled dot-product attention
+#  - 45% Implementation of multi-headed attention mechanism
+#  - 10% Reasonable translation of general conference
 # 
-# Note: This lab was adapted from "The Annotated Transformer", a publically available PyTorch implementation of the Transformer. This lab only requires about 20 lines of code, but we want you to think hard about the dimensions on which different operations apply, and debug accordingly. This will be trivial if you use the implementation for reference, but will be a worthwhile learning exercise if you don't. So we ask you not to reference that particular implementation, though you are free to reference other implementations (see references below).
+#  Note: This lab was adapted from "The Annotated Transformer", a publically available PyTorch implementation of the Transformer. This lab only requires about 20 lines of code, but we want you to think hard about the dimensions on which different operations apply, and debug accordingly. This will be trivial if you use the implementation for reference, but will be a worthwhile learning exercise if you don't. So we ask you not to reference that particular implementation, though you are free to reference other implementations (see references below).
 # 
-#     
-# ### Tips:
-# A couple of tips for this lab:
-# 0. The provided code instantiates the `MultiHeadedAttention` class for you. For a start, try printing the dimensions of `key`, `query`, and `values` in the `forward()` function the `MultiHeadedAttention` class.
-# 1. The key to this lab is section 3.2 of "Attention is All you Need". This section will tell you pretty much all you need to know about dimensions. https://arxiv.org/pdf/1706.03762.pdf
-# 2. The queries, keys, and values come in the form N x L x d_model, where N is the batch size, L is the sentence length, and d_model is the dimension of the embedding. Both the batch size and the sentence length vary across training instances.
-# 3. There are 3 pytorch implementations of matrix multiplication: torch.bmm, torch.mm, and torch.matmul. You'll want to figure out which one to use for this lab.
-# 4. There are 3 pytorch implementations of transpose: torch.t, torch.transpose, and torch.permute. You'll want to figure out which one of those to use as well.
-# 5. This implementation provides a `clone()` function that you may find useful in the MultiHeadedAttention class
 # 
-# ### Example Output
-# An example of my final samples are shown below, after 3 epochs through the data. You should expect each epoch to take ~10 minutes, and should see reasonable results after the first epoch.
+#  ### Tips:
+#  A couple of tips for this lab:
+#  0. The provided code instantiates the `MultiHeadedAttention` class for you. For a start, try printing the dimensions of `key`, `query`, and `values` in the `forward()` function the `MultiHeadedAttention` class.
+#  1. The key to this lab is section 3.2 of "Attention is All you Need". This section will tell you pretty much all you need to know about dimensions. https://arxiv.org/pdf/1706.03762.pdf
+#  2. The queries, keys, and values come in the form N x L x d_model, where N is the batch size, L is the sentence length, and d_model is the dimension of the embedding. Both the batch size and the sentence length vary across training instances.
+#  3. There are 3 pytorch implementations of matrix multiplication: torch.bmm, torch.mm, and torch.matmul. You'll want to figure out which one to use for this lab.
+#  4. There are 3 pytorch implementations of transpose: torch.t, torch.transpose, and torch.permute. You'll want to figure out which one of those to use as well.
+#  5. This implementation provides a `clone()` function that you may find useful in the MultiHeadedAttention class
 # 
-# Spanish:	Muchos miembros de la Iglesia tuvieron fe en las profecías de Brigham Young , mientras que otros se mostraron escépticos y partieron hacia lo que ellos creían que sería una vida mejor . 
+#  ### Example Output
+#  An example of my final samples are shown below, after 3 epochs through the data. You should expect each epoch to take ~10 minutes, and should see reasonable results after the first epoch.
 # 
-# Translation:	Many members of the Church had faith in Brigham Young , while others who showed and other mocking to what they would be better than they would be better better than they would better . 
+#  Spanish:	Muchos miembros de la Iglesia tuvieron fe en las profecías de Brigham Young , mientras que otros se mostraron escépticos y partieron hacia lo que ellos creían que sería una vida mejor .
 # 
-# Target:		Many Church members had faith in Brigham Young ’s prophecies , while others remained <unk> and left for what they assumed would be a better life . 
+#  Translation:	Many members of the Church had faith in Brigham Young , while others who showed and other mocking to what they would be better than they would be better better than they would better .
+# 
+#  Target:		Many Church members had faith in Brigham Young ’s prophecies , while others remained <unk> and left for what they assumed would be a better life .
 # %% [markdown]
-# ### Based on "Attention is All You Need" (https://arxiv.org/abs/1706.03762) and "The Annotated Transformer" (https://nlp.seas.harvard.edu/2018/04/03/attention.html)
-# ### Also useful:
-# http://jalammar.github.io/illustrated-transformer/
+#  ### Based on "Attention is All You Need" (https://arxiv.org/abs/1706.03762) and "The Annotated Transformer" (https://nlp.seas.harvard.edu/2018/04/03/attention.html)
+#  ### Also useful:
+#  http://jalammar.github.io/illustrated-transformer/
 # 
-# https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/
+#  https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/
 # 
 # %% [markdown]
-# ## Setup
+#  ## Setup
 # 
 
 # %%
@@ -66,6 +70,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 import math, copy, time
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
@@ -74,20 +79,20 @@ seaborn.set_context(context="talk")
 get_ipython().run_line_magic('matplotlib', 'inline')
 
 # # Download english and spanish vocab and general conference texts
-# get_ipython().system('pip install torchtext spacy')
-# get_ipython().system('python -m spacy download en')
-# get_ipython().system('python -m spacy download es')
-# get_ipython().system('wget  -O ./spanish "https://raw.githubusercontent.com/nickwalton/translation/master/gc_2010-2017_conglomerated_20171009_es.txt"')
-# get_ipython().system('wget -O ./english "https://raw.githubusercontent.com/nickwalton/translation/master/gc_2010-2017_conglomerated_20171009_en.txt"')
+get_ipython().system('pip install torchtext spacy')
+get_ipython().system('python -m spacy download en')
+get_ipython().system('python -m spacy download es')
+get_ipython().system('wget  -O ./spanish "https://raw.githubusercontent.com/nickwalton/translation/master/gc_2010-2017_conglomerated_20171009_es.txt"')
+get_ipython().system('wget -O ./english "https://raw.githubusercontent.com/nickwalton/translation/master/gc_2010-2017_conglomerated_20171009_en.txt"')
 
 
 # %%
 
 
 # %% [markdown]
-# #Model
+#  #Model
 # %% [markdown]
-# ## Model Helpers
+#  ## Model Helpers
 # 
 
 # %%
@@ -153,9 +158,9 @@ def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 # %% [markdown]
-# ## Encoder
+#  ## Encoder
 # 
-# The encoder is composed of a stack of $N=6$ identical layers. 
+#  The encoder is composed of a stack of $N=6$ identical layers.
 
 # %%
 class Encoder(nn.Module):
@@ -188,9 +193,9 @@ class EncoderLayer(nn.Module):
         return self.sublayer[1](x, self.feed_forward)
 
 # %% [markdown]
-# ## Decoder
+#  ## Decoder
 # 
-# The decoder is also composed of a stack of $N=6$ identical layers.  
+#  The decoder is also composed of a stack of $N=6$ identical layers.
 # 
 
 # %%
@@ -230,26 +235,28 @@ def subsequent_mask(size):
     return torch.from_numpy(subsequent_mask) == 0
 
 # %% [markdown]
-# ##Implement Attention
+#  ##Implement Attention
 # 
 # 
-# https://arxiv.org/pdf/1706.03762.pdf         
-#                                                                                                                                                                      
+#  https://arxiv.org/pdf/1706.03762.pdf
+# 
 
 # %%
 # def attention(query, key, value, mask):
-def attention(Q, K, V, mask):
+def attention(Q: Tensor, K: Tensor, V: Tensor, mask):
     # Compute 'Scaled Dot Product Attention'
     
     # scores = QK^T/scale
-    scores = torch.matmul( Q, K.transpose() ) * 1/8 # transpose and matmul dim=???
+    scores = torch.bmm( Q, K.permute(0, 2, 1) ) * 1/8 # transpose and matmul dim=???
 
     
     # Apply the mask
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
-        
-    output = torch.matmul( F.softmax(scores), V ) # softmax dim=??? matmul dim=???
+    
+    print('scores', scores)
+    soft_output = F.softmax(scores, dim=1)
+    output = torch.bmm( soft_output, V ) # softmax dim=??? matmul dim=???
     
     return output
 
@@ -261,12 +268,15 @@ class MultiHeadedAttention(nn.Module):
         # Implement Multi-head attention mechanism
         self.dropout = dropout
         # Make an attention head (linear layers for q, k, and v)
-        head = [nn.Linear(d_model, d_model/h) for _ in range(3)]
+        head = nn.Linear(d_model, d_model//h).cuda()
         # Make h copies of the attention head (Hint: See the `clone()` helper function)
-        self.attn_heads = clones(head, h)
-        self.w_output = nn.Linear(d_model, d_model)
+        self.attn_heads = [clones(head, 3) for _ in range(h)]
+        self.w_output: nn.Linear = nn.Linear(d_model, d_model)
 
     def forward(self, query, key, value, mask):
+        # print('query.shape: ', query.shape)
+        # print('len of self.attn_heads: ', len(self.attn_heads))
+        # print('self.attn_heads: ',self.attn_heads)
         outputs = []
         for head in self.attn_heads:
             # Pass the query, key, value through their respective layers
@@ -274,23 +284,29 @@ class MultiHeadedAttention(nn.Module):
             K = head[1](key)
             V = head[2](value)
             # Compute scaled dot-product attention on the output
-            outputs.append( attention(Q, K, V) )
+            outputs.append( attention(Q, K, V, mask) )
+            # print('Q.shape: ', Q.shape)
         
-        multi_head = self.w_output( torch.cat(outputs, 1) )
+        outputs_concat = torch.cat(outputs, 2)
+        multi_head = self.w_output( outputs_concat )
+        # print('len(outputs): ', len(outputs) )
+        # print('outputs_concat.shape: ', outputs_concat.shape)
+        # print('self.w_output.shape: ', self.w_output.weight.shape)
         return multi_head
         
+
 # %% [markdown]
-# ## Positional Encoding                                                                                                                             
-# Since our model contains no recurrence and no convolution, in order for the model to make use of the order of the sequence, we must inject some information about the relative or absolute position of the tokens in the sequence.  To this end, we add "positional encodings" to the input embeddings at the bottoms of the encoder and decoder stacks.  The positional encodings have the same dimension $d_{\text{model}}$ as the embeddings, so that the two can be summed.   There are many choices of positional encodings, learned and fixed [(cite)](https://arxiv.org/pdf/1705.03122.pdf). 
+#  ## Positional Encoding
+#  Since our model contains no recurrence and no convolution, in order for the model to make use of the order of the sequence, we must inject some information about the relative or absolute position of the tokens in the sequence.  To this end, we add "positional encodings" to the input embeddings at the bottoms of the encoder and decoder stacks.  The positional encodings have the same dimension $d_{\text{model}}$ as the embeddings, so that the two can be summed.   There are many choices of positional encodings, learned and fixed [(cite)](https://arxiv.org/pdf/1705.03122.pdf).
 # 
-# In this work, we use sine and cosine functions of different frequencies:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
-# $$PE_{(pos,2i)} = sin(pos / 10000^{2i/d_{\text{model}}})$$
+#  In this work, we use sine and cosine functions of different frequencies:
+#  $$PE_{(pos,2i)} = sin(pos / 10000^{2i/d_{\text{model}}})$$
 # 
-# $$PE_{(pos,2i+1)} = cos(pos / 10000^{2i/d_{\text{model}}})$$                                                                                                                                                                                                                                                        
-# where $pos$ is the position and $i$ is the dimension.  That is, each dimension of the positional encoding corresponds to a sinusoid.  The wavelengths form a geometric progression from $2\pi$ to $10000 \cdot 2\pi$.  We chose this function because we hypothesized it would allow the model to easily learn to attend by relative positions, since for any fixed offset $k$, $PE_{pos+k}$ can be represented as a linear function of $PE_{pos}$. 
+#  $$PE_{(pos,2i+1)} = cos(pos / 10000^{2i/d_{\text{model}}})$$
+#  where $pos$ is the position and $i$ is the dimension.  That is, each dimension of the positional encoding corresponds to a sinusoid.  The wavelengths form a geometric progression from $2\pi$ to $10000 \cdot 2\pi$.  We chose this function because we hypothesized it would allow the model to easily learn to attend by relative positions, since for any fixed offset $k$, $PE_{pos+k}$ can be represented as a linear function of $PE_{pos}$.
 # 
-# In addition, we apply dropout to the sums of the embeddings and the positional encodings in both the encoder and decoder stacks.  For the base model, we use a rate of $P_{drop}=0.1$. 
-#                                                                                                                                                                                                                                                     
+#  In addition, we apply dropout to the sums of the embeddings and the positional encodings in both the encoder and decoder stacks.  For the base model, we use a rate of $P_{drop}=0.1$.
+# 
 # 
 
 # %%
@@ -324,7 +340,7 @@ plt.legend(["dim %d"%p for p in [4,5,6,7]])
 None
 
 # %% [markdown]
-# ## Full Model
+#  ## Full Model
 
 # %%
 class TransformerModel(nn.Module):
@@ -360,10 +376,10 @@ class TransformerModel(nn.Module):
         return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
 
 # %% [markdown]
-# # Training
+#  # Training
 # 
 # %% [markdown]
-# ## Batches and Masking
+#  ## Batches and Masking
 
 # %%
 class Batch:
@@ -400,9 +416,9 @@ def batch_size_fn(new, count, sofar):
     return max(src_elements, tgt_elements)
 
 # %% [markdown]
-# ## Label Smoothing
+#  ## Label Smoothing
 # 
-# During training, we employed label smoothing of value $\epsilon_{ls}=0.1$ [(cite)](https://arxiv.org/abs/1512.00567).  This hurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score.  
+#  During training, we employed label smoothing of value $\epsilon_{ls}=0.1$ [(cite)](https://arxiv.org/abs/1512.00567).  This hurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score.
 
 # %%
 class LabelSmoothing(nn.Module):
@@ -429,7 +445,7 @@ class LabelSmoothing(nn.Module):
         return self.criterion(x, Variable(true_dist, requires_grad=False))
 
 # %% [markdown]
-# ## Data Loading
+#  ## Data Loading
 # 
 
 # %%
@@ -471,8 +487,9 @@ MIN_FREQ = 1
 SRC.build_vocab(train.src, min_freq=MIN_FREQ)
 TGT.build_vocab(train.trg, min_freq=MIN_FREQ)
 print('done')
+
 # %% [markdown]
-# ## Training Code
+#  ## Training Code
 
 # %%
 class LossFunction:
@@ -539,14 +556,14 @@ def run_epoch(data_iter, model, loss_compute):
     
 
 # %% [markdown]
-# ##Train
+#  ## Train
 
 # %%
 import gc
 gc.collect()
 
 pad_idx = TGT.vocab.stoi["<blank>"]
-model = TransformerModel(len(SRC.vocab), len(TGT.vocab), N=6, d_model=512).cuda(0)
+model = TransformerModel(len(SRC.vocab), len(TGT.vocab), N=6, d_model=512, h=8).cuda()
 n_epochs = 3
 device = torch.device('cuda')
 
@@ -563,15 +580,17 @@ def scope():
 
     model_opt = torch.optim.Adam(model.parameters(), lr=5e-4)
     for epoch in range(n_epochs):
+        print(f'Starting epoch: {epoch}')
         model.train()
         run_epoch((rebatch(pad_idx, b) for b in train_iter), 
                   model, 
                   LossFunction(model.generator, criterion, model_opt))
         model.eval()
+        print(f'finished.\n')
 scope()
 
 # %% [markdown]
-# ## Translate
+#  ## Translate
 
 # %%
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
@@ -622,3 +641,4 @@ for i, batch in enumerate(valid_iter):
     
     if i > 1000 and i<1100:
         break
+
