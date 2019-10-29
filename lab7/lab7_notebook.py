@@ -247,15 +247,16 @@ def attention(Q: Tensor, K: Tensor, V: Tensor, mask):
     # Compute 'Scaled Dot Product Attention'
     
     # scores = QK^T/scale
-    scores = torch.bmm( Q, K.permute(0, 2, 1) ) * 1/8 # transpose and matmul dim=???
+    scores = torch.bmm( Q, K.permute(0, 2, 1) ) * 1/np.sqrt(Q.shape[2]) 
 
     
     # Apply the mask
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
     
-    print('scores', scores)
-    soft_output = F.softmax(scores, dim=1)
+    # print('scores.shape: ', scores.shape)
+    # print('scores', scores)
+    soft_output = F.softmax(scores, dim=2)
     output = torch.bmm( soft_output, V ) # softmax dim=??? matmul dim=???
     
     return output
@@ -266,7 +267,7 @@ class MultiHeadedAttention(nn.Module):
     def __init__(self, h, d_model, dropout=0.1):
         super(MultiHeadedAttention, self).__init__()
         # Implement Multi-head attention mechanism
-        self.dropout = dropout
+        self.dropout = nn.Dropout(dropout)
         # Make an attention head (linear layers for q, k, and v)
         head = nn.Linear(d_model, d_model//h).cuda()
         # Make h copies of the attention head (Hint: See the `clone()` helper function)
@@ -288,7 +289,7 @@ class MultiHeadedAttention(nn.Module):
             # print('Q.shape: ', Q.shape)
         
         outputs_concat = torch.cat(outputs, 2)
-        multi_head = self.w_output( outputs_concat )
+        multi_head = self.w_output( self.dropout(outputs_concat ) )
         # print('len(outputs): ', len(outputs) )
         # print('outputs_concat.shape: ', outputs_concat.shape)
         # print('self.w_output.shape: ', self.w_output.weight.shape)
@@ -350,7 +351,7 @@ class TransformerModel(nn.Module):
     def __init__(self, src_vocab, tgt_vocab, N=6, d_model=256, d_ff=1024, h=8, dropout=0.1):
         super(TransformerModel, self).__init__()
         
-        attn = MultiHeadedAttention(h, d_model)
+        attn = MultiHeadedAttention(h, d_model, dropout)
         ff = PositionwiseFeedForward(d_model, d_ff, dropout)
         position = PositionalEncoding(d_model, dropout)
         c = copy.deepcopy
@@ -641,4 +642,3 @@ for i, batch in enumerate(valid_iter):
     
     if i > 1000 and i<1100:
         break
-
